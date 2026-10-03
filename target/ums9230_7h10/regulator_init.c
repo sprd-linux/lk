@@ -1,0 +1,90 @@
+#include <lk/debug.h>
+#include <asm/arch/common.h>
+#include <asm/arch/sprd_reg.h>
+#include <i2c.h>
+#include <adi_hal_internal.h>
+#include <sprd_regulator.h>
+#include <sprd_boardid.h>
+
+#define ETA355D_SLAVE_ADDR	0x60
+#define ETA_REG0		0x00
+#define ETA_INIT_VAL		0x9e
+
+static int eta_i2c_bus_num = SPRDETA_I2C_BUS;
+
+static int power_on_voltage_init(void)
+{
+	regulator_set_voltage("vddrf1v25",1250);
+
+	/*check dcdc_cpu1 spuuly mode */
+	if(sprd_get_power_mode() != 1) { /*cpu1 power supply by pmic */
+		regulator_set_voltage("vddgpu",1000);
+	}
+
+	/* MEMQ config-0x188C */
+	ANA_REG_SET(ANA_REG_GLB_DCDC_MEMQ_REG1,
+		    BITS_DCDC_MEMQ_CF(0x1) |	//BIT(5:4)=01
+		    BITS_DCDC_MEMQ_CL_CTRL(0x0) |	//Type.
+		    0);
+	/* MODEM config-0x1870 */
+	ANA_REG_SET(ANA_REG_GLB_DCDC_MODEM_REG2,
+		    BITS_DCDC_MODEM_STBOP(0x3e) |	//BIT(12:6)=0111110
+		    BITS_DCDC_MODEM_ZCD(0x01) |		//Type.
+		    BITS_DCDC_MODEM_PFMAD(0x08) |	//Type.
+		    0);
+	/* WPA config*/
+	ANA_REG_SET(ANA_REG_GLB_BUCK_TOP_REG1, 0x23fa);
+	ANA_REG_SET(ANA_REG_GLB_RESERVED_REG_CORE, 0x080);
+	ANA_REG_SET(ANA_REG_GLB_BUCK_TOP_REG2, 0x40);
+	ANA_REG_SET(ANA_REG_GLB_DCDC_WPA_REG3, 0x8e1);
+	ANA_REG_SET(ANA_REG_GLB_DCDC_WPA_VOL, 0xdf1);
+	ANA_REG_SET(ANA_REG_GLB_DCDC_WPA_REG1, 0x3f1c);
+	ANA_REG_SET(ANA_REG_GLB_DCDC_VLG_SEL0, 0x80);
+	/* RTC config*/
+	ANA_REG_SET(ANA_REG_GLB_RESERVED_REG_RTC, 0x2c);
+	ANA_REG_SET(ANA_REG_GLB_RTC_ALL_TOP, 0x01);
+	return 0;
+}
+
+static int eta355d_write_reg(int reg, u8 val)
+{
+	int ret;
+	uint8_t buf[2] = {0};
+	buf[0] = reg;
+	buf[1] = val;
+
+	ret = i2c_send(eta_i2c_bus_num, ETA355D_SLAVE_ADDR, buf, 2);
+	if (ret < 0)
+		printf("eta355d i2c write failed!");
+
+	return ret;
+}
+
+static int eta355d_read_reg(u8 reg, u8 *value)
+{
+	int ret;
+	uint8_t reg_addr[2] = {0};
+	reg_addr[0] = reg;
+	ret = i2c_read_write(eta_i2c_bus_num, ETA355D_SLAVE_ADDR, reg_addr, 1, value, 1);
+
+	if (ret < 0) {
+		printf("reg(0x%x), ret(%d)\n", reg, ret);
+		return ret;
+	}
+
+	printf("eta_read_reg reg = 0x%x, value = %d / %x\n", reg, *value, *value);
+
+	return 0;
+}
+
+int regulator_init(void)
+{
+	u8 reg_value = 0;
+
+	power_on_voltage_init();
+
+	eta355d_write_reg(ETA_REG0, ETA_INIT_VAL);
+	eta355d_read_reg(ETA_REG0, &reg_value);
+
+	return 0;
+}

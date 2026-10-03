@@ -1,0 +1,21 @@
+build-*
+*.swp
+*~
+tags
+TAGS
+local.mk
+*.orig
+cscope.*
+doit
+t
+tagit
+blk.bin
+*.dSYM
+scripts/toolpaths.local
+.vscode*
+
+# BSP build output and local caches
+.DS_Store
+__pycache__/
+/out/
+*.log
